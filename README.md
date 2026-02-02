@@ -1,6 +1,6 @@
 # AI Feed - Personalized Content Discovery App
 
-A Google Discover-like Android app that creates personalized article feeds based on user interests.
+An Android app that creates personalized article feeds based on user interests.
 
 ## Features
 
