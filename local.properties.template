@@ -1,0 +1,15 @@
+# Local properties - Copy this to local.properties and fill in your values
+# DO NOT commit local.properties to version control
+
+# SDK Location (Android Studio will set this automatically)
+sdk.dir=/path/to/your/android/sdk
+
+# Supabase Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key-here
+
+# NewsAPI Configuration
+NEWS_API_KEY=your-newsapi-key-here
+
+# Google Sign-In (from Firebase Console > Authentication > Sign-in method > Google)
+GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com

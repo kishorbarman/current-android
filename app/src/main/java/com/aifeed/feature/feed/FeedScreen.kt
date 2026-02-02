@@ -1,0 +1,415 @@
+package com.aifeed.feature.feed
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import coil.compose.AsyncImage
+import com.aifeed.R
+import com.aifeed.core.database.entity.ArticleEntity
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import java.time.Duration
+import java.time.Instant
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FeedScreen(
+    onArticleClick: (ArticleEntity) -> Unit,
+    onSearchClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    viewModel: FeedViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val articles = viewModel.articles.collectAsLazyPagingItems()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Track scroll for collapsing header with accumulated offset and threshold
+    var accumulatedScroll by remember { mutableIntStateOf(0) }
+    var isHeaderVisible by remember { mutableStateOf(true) }
+    val scrollThreshold = 150 // pixels to scroll before toggling
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y.toInt()
+
+                if (delta > 0) {
+                    // Scrolling up - show header quickly
+                    accumulatedScroll = (accumulatedScroll + delta).coerceAtMost(0)
+                    if (accumulatedScroll > -scrollThreshold / 2) {
+                        isHeaderVisible = true
+                    }
+                } else if (delta < 0) {
+                    // Scrolling down - hide header after threshold
+                    accumulatedScroll = (accumulatedScroll + delta).coerceAtLeast(-scrollThreshold * 2)
+                    if (accumulatedScroll < -scrollThreshold) {
+                        isHeaderVisible = false
+                    }
+                }
+
+                return Offset.Zero
+            }
+        }
+    }
+
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissError()
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            AnimatedVisibility(
+                visible = isHeaderVisible,
+                enter = slideInVertically(
+                    initialOffsetY = { -it },
+                    animationSpec = tween(durationMillis = 200)
+                ),
+                exit = slideOutVertically(
+                    targetOffsetY = { -it },
+                    animationSpec = tween(durationMillis = 200)
+                )
+            ) {
+                Column {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = stringResource(R.string.feed_title),
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        actions = {
+                            IconButton(onClick = onSearchClick) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search"
+                                )
+                            }
+                            IconButton(onClick = onProfileClick) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = "Profile"
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    // Topic filter chips
+                    if (uiState.userTopics.isNotEmpty()) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        ) {
+                            item {
+                                FilterChip(
+                                    selected = uiState.selectedTopicId == null,
+                                    onClick = { viewModel.selectTopic(null) },
+                                    label = { Text("All") }
+                                )
+                            }
+                            items(uiState.userTopics) { topic ->
+                                FilterChip(
+                                    selected = uiState.selectedTopicId == topic.id,
+                                    onClick = { viewModel.selectTopic(topic.id) },
+                                    label = { Text(topic.name) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        SwipeRefresh(
+            state = rememberSwipeRefreshState(isRefreshing = uiState.isRefreshing),
+            onRefresh = { viewModel.refreshFeed() },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .nestedScroll(nestedScrollConnection)
+        ) {
+            ArticleList(
+                articles = articles,
+                onArticleClick = { article ->
+                    viewModel.onArticleClicked(article)
+                    onArticleClick(article)
+                },
+                onBookmarkClick = { viewModel.toggleBookmark(it) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArticleList(
+    articles: LazyPagingItems<ArticleEntity>,
+    onArticleClick: (ArticleEntity) -> Unit,
+    onBookmarkClick: (ArticleEntity) -> Unit
+) {
+    val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues()
+    LazyColumn(
+        contentPadding = PaddingValues(
+            bottom = navigationBarPadding.calculateBottomPadding()
+        ),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        items(
+            count = articles.itemCount,
+            key = { index -> articles[index]?.id ?: index }
+        ) { index ->
+            articles[index]?.let { article ->
+                ArticleItem(
+                    article = article,
+                    onClick = { onArticleClick(article) },
+                    onBookmarkClick = { onBookmarkClick(article) }
+                )
+                if (index < articles.itemCount - 1) {
+                    Divider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        thickness = 3.dp,
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Loading state
+        when (articles.loadState.append) {
+            is LoadState.Loading -> {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+            is LoadState.Error -> {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.error_loading),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+            is LoadState.NotLoading -> {}
+        }
+
+        // Initial loading state
+        if (articles.loadState.refresh is LoadState.Loading && articles.itemCount == 0) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+
+        // Empty state
+        if (articles.loadState.refresh is LoadState.NotLoading && articles.itemCount == 0) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = stringResource(R.string.no_articles),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArticleItem(
+    article: ArticleEntity,
+    onClick: () -> Unit,
+    onBookmarkClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        // Full-bleed image
+        article.imageUrl?.let { imageUrl ->
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f),
+                contentScale = ContentScale.Crop
+            )
+        }
+
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Title
+            Text(
+                text = article.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Preview
+            Text(
+                text = article.preview,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Footer: Source, time, bookmark
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = article.sourceName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = " \u2022 ",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatRelativeTime(article.publishedAt),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = onBookmarkClick,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = if (article.isBookmarked) {
+                            Icons.Default.Bookmark
+                        } else {
+                            Icons.Default.BookmarkBorder
+                        },
+                        contentDescription = "Bookmark",
+                        tint = if (article.isBookmarked) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatRelativeTime(instant: Instant): String {
+    val now = Instant.now()
+    val duration = Duration.between(instant, now)
+
+    return when {
+        duration.toMinutes() < 1 -> "Just now"
+        duration.toMinutes() < 60 -> "${duration.toMinutes()}m ago"
+        duration.toHours() < 24 -> "${duration.toHours()}h ago"
+        duration.toDays() < 7 -> "${duration.toDays()}d ago"
+        else -> "${duration.toDays() / 7}w ago"
+    }
+}

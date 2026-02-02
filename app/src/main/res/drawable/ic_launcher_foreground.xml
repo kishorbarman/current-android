@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- RSS Feed icon -->
+    <group
+        android:translateX="27"
+        android:translateY="27">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M6.18,15.64a2.18,2.18 0,1 1,2.18 2.18A2.18,2.18 0,0 1,6.18 15.64Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M4,4.44v4.83a16.19,16.19 0,0 1,16.19 16.19h4.83A21,21 0,0 0,4 4.44Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M4,11.61v4.83a9,9 0,0 1,9 9h4.83A13.86,13.86 0,0 0,4 11.61Z" />
+    </group>
+</vector>
