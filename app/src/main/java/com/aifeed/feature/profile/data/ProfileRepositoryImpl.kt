@@ -45,6 +45,28 @@ class ProfileRepositoryImpl @Inject constructor(
         }.flow
     }
 
+    override fun getLikedArticles(): Flow<PagingData<ArticleEntity>> {
+        return Pager(
+            config = PagingConfig(
+                pageSize = 20,
+                enablePlaceholders = false
+            )
+        ) {
+            articleDao.getLikedArticlesPaged()
+        }.flow
+    }
+
+    override fun getDislikedArticles(): Flow<PagingData<ArticleEntity>> {
+        return Pager(
+            config = PagingConfig(
+                pageSize = 20,
+                enablePlaceholders = false
+            )
+        ) {
+            articleDao.getDislikedArticlesPaged()
+        }.flow
+    }
+
     override fun getUserTopics(userId: String): Flow<List<TopicEntity>> {
         return userTopicDao.getUserTopicsWithDetails(userId)
     }
@@ -56,6 +78,26 @@ class ProfileRepositoryImpl @Inject constructor(
                 NetworkResult.Success(Unit)
             } catch (e: Exception) {
                 NetworkResult.Error("Failed to remove bookmark: ${e.message}")
+            }
+        }
+
+    override suspend fun removeLike(articleId: String): NetworkResult<Unit> =
+        withContext(ioDispatcher) {
+            try {
+                articleDao.updateLikeStatus(articleId, false)
+                NetworkResult.Success(Unit)
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to remove like: ${e.message}")
+            }
+        }
+
+    override suspend fun removeDislike(articleId: String): NetworkResult<Unit> =
+        withContext(ioDispatcher) {
+            try {
+                articleDao.updateDislikeStatus(articleId, false)
+                NetworkResult.Success(Unit)
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to remove dislike: ${e.message}")
             }
         }
 

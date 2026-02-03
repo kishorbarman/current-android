@@ -37,8 +37,9 @@ data class ProfileUiState(
 
 sealed class ProfileTab {
     data object Bookmarks : ProfileTab()
+    data object Liked : ProfileTab()
+    data object Disliked : ProfileTab()
     data object History : ProfileTab()
-    data object Topics : ProfileTab()
 }
 
 @HiltViewModel
@@ -75,6 +76,12 @@ class ProfileViewModel @Inject constructor(
     val bookmarkedArticles: Flow<PagingData<ArticleEntity>> =
         profileRepository.getBookmarkedArticles().cachedIn(viewModelScope)
 
+    val likedArticles: Flow<PagingData<ArticleEntity>> =
+        profileRepository.getLikedArticles().cachedIn(viewModelScope)
+
+    val dislikedArticles: Flow<PagingData<ArticleEntity>> =
+        profileRepository.getDislikedArticles().cachedIn(viewModelScope)
+
     val readingHistory: Flow<PagingData<ArticleEntity>> =
         profileRepository.getReadingHistory().cachedIn(viewModelScope)
 
@@ -105,6 +112,18 @@ class ProfileViewModel @Inject constructor(
     fun removeBookmark(articleId: String) {
         viewModelScope.launch {
             profileRepository.removeBookmark(articleId)
+        }
+    }
+
+    fun removeLike(articleId: String) {
+        viewModelScope.launch {
+            profileRepository.removeLike(articleId)
+        }
+    }
+
+    fun removeDislike(articleId: String) {
+        viewModelScope.launch {
+            profileRepository.removeDislike(articleId)
         }
     }
 

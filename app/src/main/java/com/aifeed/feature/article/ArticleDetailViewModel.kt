@@ -22,7 +22,8 @@ data class ArticleDetailUiState(
     val article: ArticleEntity? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
-    val isBookmarked: Boolean = false
+    val isBookmarked: Boolean = false,
+    val similarArticles: List<ArticleEntity> = emptyList()
 )
 
 @HiltViewModel
@@ -36,16 +37,19 @@ class ArticleDetailViewModel @Inject constructor(
 
     private val _error = MutableStateFlow<String?>(null)
     private val _readStartTime = MutableStateFlow<Instant?>(null)
+    private val _similarArticles = MutableStateFlow<List<ArticleEntity>>(emptyList())
 
     val uiState: StateFlow<ArticleDetailUiState> = combine(
         feedRepository.getArticleById(articleId),
-        _error
-    ) { article, error ->
+        _error,
+        _similarArticles
+    ) { article, error, similarArticles ->
         ArticleDetailUiState(
             article = article,
             isLoading = article == null && error == null,
             error = error,
-            isBookmarked = article?.isBookmarked ?: false
+            isBookmarked = article?.isBookmarked ?: false,
+            similarArticles = similarArticles
         )
     }.stateIn(
         viewModelScope,
@@ -55,6 +59,13 @@ class ArticleDetailViewModel @Inject constructor(
 
     init {
         markArticleAsClicked()
+        loadSimilarArticles()
+    }
+
+    private fun loadSimilarArticles() {
+        viewModelScope.launch {
+            _similarArticles.value = feedRepository.getSimilarArticles(articleId, limit = 10)
+        }
     }
 
     private fun markArticleAsClicked() {

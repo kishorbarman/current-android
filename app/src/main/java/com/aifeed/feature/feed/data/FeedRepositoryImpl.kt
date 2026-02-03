@@ -6,10 +6,12 @@ import androidx.paging.PagingData
 import com.aifeed.core.database.dao.ArticleDao
 import com.aifeed.core.database.dao.InteractionDao
 import com.aifeed.core.database.dao.TopicDao
+import com.aifeed.core.database.dao.UserSourceDao
 import com.aifeed.core.database.dao.UserTopicDao
 import com.aifeed.core.database.entity.ArticleEntity
 import com.aifeed.core.database.entity.InteractionEntity
 import com.aifeed.core.database.entity.InteractionType
+import com.aifeed.core.database.entity.UserSourceEntity
 import com.aifeed.core.di.IoDispatcher
 import com.aifeed.core.network.NetworkResult
 import com.aifeed.core.network.api.NewsApiService
@@ -31,6 +33,7 @@ class FeedRepositoryImpl @Inject constructor(
     private val articleDao: ArticleDao,
     private val interactionDao: InteractionDao,
     private val userTopicDao: UserTopicDao,
+    private val userSourceDao: UserSourceDao,
     private val topicDao: TopicDao,
     private val supabaseApi: SupabaseApiService,
     private val newsApiService: NewsApiService,
@@ -38,6 +41,7 @@ class FeedRepositoryImpl @Inject constructor(
 ) : FeedRepository {
 
     private val gson = Gson()
+    private var currentPage = 1
 
     override fun getArticlesFeed(userId: String): Flow<PagingData<ArticleEntity>> {
         return Pager(
@@ -70,12 +74,15 @@ class FeedRepositoryImpl @Inject constructor(
     override suspend fun refreshFeed(userId: String): NetworkResult<Unit> =
         withContext(ioDispatcher) {
             try {
+                // Reset page counter for fresh refresh
+                currentPage = 1
+
                 // Get user's topics
                 val userTopicIds = userTopicDao.getUserTopicIdsOnce(userId)
 
                 // Always fetch from NewsAPI for fresh content
                 if (userTopicIds.isNotEmpty()) {
-                    fetchFromNewsApi(userTopicIds)
+                    fetchFromNewsApi(userId, userTopicIds)
                 }
 
                 // Also try Supabase for any additional articles
@@ -88,8 +95,15 @@ class FeedRepositoryImpl @Inject constructor(
                     }
 
                     if (supabaseResult.isSuccessful) {
+                        // Pre-fetch user preferences for relevance calculation
+                        val userTopicWeights = userTopicDao.getUserTopicsOnce(userId).associate { it.topicId to it.weight }
+                        val userSourceWeights = userSourceDao.getUserSourcesOnce(userId).associate { it.sourceName to it.weight }
+
                         val articles = supabaseResult.body()?.map { dto ->
-                            dto.toEntity(calculateRelevanceScore(userId, dto.primaryTopicId ?: ""))
+                            val topicWeight = userTopicWeights[dto.primaryTopicId] ?: 1.0f
+                            val sourceWeight = userSourceWeights[dto.sourceName] ?: 1.0f
+                            val relevance = (topicWeight * 0.6f + sourceWeight * 0.4f).coerceIn(0.1f, 3.0f)
+                            dto.toEntity(relevance)
                         } ?: emptyList()
 
                         if (articles.isNotEmpty()) {
@@ -112,9 +126,47 @@ class FeedRepositoryImpl @Inject constructor(
             }
         }
 
-    private suspend fun fetchFromNewsApi(topicIds: List<String>): NetworkResult<Unit> {
+    override suspend fun loadMoreArticles(userId: String): NetworkResult<Int> =
+        withContext(ioDispatcher) {
+            try {
+                // Increment page for next batch
+                currentPage++
+
+                // Get user's topics
+                val userTopicIds = userTopicDao.getUserTopicIdsOnce(userId)
+
+                // Fetch next page from NewsAPI
+                val result = if (userTopicIds.isNotEmpty()) {
+                    fetchFromNewsApi(userId, userTopicIds)
+                } else {
+                    NetworkResult.Error("No topics selected")
+                }
+
+                when (result) {
+                    is NetworkResult.Success -> {
+                        val newCount = articleDao.getArticleCount()
+                        NetworkResult.Success(newCount)
+                    }
+                    is NetworkResult.Error -> {
+                        // Revert page increment on error
+                        currentPage--
+                        NetworkResult.Error(result.message)
+                    }
+                    is NetworkResult.Loading -> NetworkResult.Loading
+                }
+            } catch (e: Exception) {
+                currentPage--
+                NetworkResult.Error("Failed to load more articles: ${e.message}")
+            }
+        }
+
+    private suspend fun fetchFromNewsApi(userId: String, topicIds: List<String>): NetworkResult<Unit> {
         return try {
             val articles = mutableListOf<ArticleEntity>()
+
+            // Pre-fetch user preferences for relevance calculation
+            val userTopicWeights = userTopicDao.getUserTopicsOnce(userId).associate { it.topicId to it.weight }
+            val userSourceWeights = userSourceDao.getUserSourcesOnce(userId).associate { it.sourceName to it.weight }
 
             // Map topic slugs to NewsAPI categories
             // NewsAPI categories: business, entertainment, general, health, science, sports, technology
@@ -164,11 +216,15 @@ class FeedRepositoryImpl @Inject constructor(
 
             // Fetch articles for each category (limit to 6 API calls to stay within limits)
             for ((category, topicId) in categoriesToFetch.take(6)) {
-                val response = newsApiService.getTopHeadlines(category = category)
+                val response = newsApiService.getTopHeadlines(category = category, page = currentPage)
                 if (response.isSuccessful) {
                     response.body()?.articles?.filter {
                         !it.title.contains("[Removed]") && it.title.isNotBlank()
                     }?.forEach { newsArticle ->
+                        // Calculate relevance using pre-fetched weights
+                        val topicWeight = userTopicWeights[topicId] ?: 1.0f
+                        val sourceWeight = userSourceWeights[newsArticle.source.name] ?: 1.0f
+                        val relevance = (topicWeight * 0.6f + sourceWeight * 0.4f).coerceIn(0.1f, 3.0f)
                         articles.add(
                             ArticleEntity(
                                 id = UUID.randomUUID().toString(),
@@ -183,7 +239,7 @@ class FeedRepositoryImpl @Inject constructor(
                                     Instant.now()
                                 },
                                 primaryTopicId = topicId,
-                                relevanceScore = 1.0f,
+                                relevanceScore = relevance,
                                 cachedAt = Instant.now()
                             )
                         )
@@ -202,9 +258,12 @@ class FeedRepositoryImpl @Inject constructor(
         }
     }
 
-    private suspend fun calculateRelevanceScore(userId: String, topicId: String): Float {
-        val userTopic = userTopicDao.getUserTopicsOnce(userId).find { it.topicId == topicId }
-        return userTopic?.weight ?: 0.5f
+    private suspend fun calculateRelevanceScore(userId: String, topicId: String, sourceName: String): Float {
+        val topicWeight = userTopicDao.getUserTopicsOnce(userId).find { it.topicId == topicId }?.weight ?: 1.0f
+        val sourceWeight = userSourceDao.getUserSource(userId, sourceName)?.weight ?: 1.0f
+
+        // Combined score: topic (60%) + source (40%)
+        return (topicWeight * 0.6f + sourceWeight * 0.4f).coerceIn(0.1f, 3.0f)
     }
 
     override suspend fun recordInteraction(
@@ -227,6 +286,7 @@ class FeedRepositoryImpl @Inject constructor(
             interactionDao.insertInteraction(interaction)
 
             // Update topic weights based on interaction
+            // Note: Like/Dislike status is handled separately by toggleLike/toggleDislike
             updateTopicWeights(userId, articleId, type)
 
             NetworkResult.Success(Unit)
@@ -242,6 +302,7 @@ class FeedRepositoryImpl @Inject constructor(
     ) {
         val article = articleDao.getArticleByIdOnce(articleId) ?: return
         val topicId = article.primaryTopicId
+        val sourceName = article.sourceName
 
         val weightDelta = when (type) {
             InteractionType.CLICK -> 0.1f
@@ -253,10 +314,32 @@ class FeedRepositoryImpl @Inject constructor(
             InteractionType.DISLIKE -> -1.0f
         }
 
-        val currentUserTopic = userTopicDao.getUserTopic(userId, topicId) ?: return
-        val newWeight = (currentUserTopic.weight + weightDelta).coerceIn(0.1f, 3.0f)
+        // Update topic weight
+        val currentUserTopic = userTopicDao.getUserTopic(userId, topicId)
+        if (currentUserTopic != null) {
+            val newTopicWeight = (currentUserTopic.weight + weightDelta).coerceIn(0.1f, 3.0f)
+            userTopicDao.updateWeight(userId, topicId, newTopicWeight)
+        }
 
-        userTopicDao.updateWeight(userId, topicId, newWeight)
+        // Update source weight
+        val currentUserSource = userSourceDao.getUserSource(userId, sourceName)
+        if (currentUserSource != null) {
+            val newSourceWeight = (currentUserSource.weight + weightDelta).coerceIn(0.1f, 3.0f)
+            userSourceDao.updateWeight(userId, sourceName, newSourceWeight)
+        } else {
+            // Create new source preference
+            val initialWeight = (1.0f + weightDelta).coerceIn(0.1f, 3.0f)
+            userSourceDao.insertUserSource(
+                UserSourceEntity(
+                    userId = userId,
+                    sourceName = sourceName,
+                    weight = initialWeight
+                )
+            )
+        }
+
+        // Note: Relevance scores are NOT updated immediately to avoid UI jitter.
+        // The updated weights will be applied during the next feed refresh.
     }
 
     override suspend fun toggleBookmark(articleId: String): NetworkResult<Boolean> =
@@ -271,6 +354,66 @@ class FeedRepositoryImpl @Inject constructor(
                 NetworkResult.Success(newBookmarkState)
             } catch (e: Exception) {
                 NetworkResult.Error("Failed to toggle bookmark: ${e.message}")
+            }
+        }
+
+    override suspend fun toggleLike(userId: String, articleId: String): NetworkResult<Boolean> =
+        withContext(ioDispatcher) {
+            try {
+                val article = articleDao.getArticleByIdOnce(articleId)
+                    ?: return@withContext NetworkResult.Error("Article not found")
+
+                val newLikeState = !article.isLiked
+                articleDao.updateLikeStatus(articleId, newLikeState)
+
+                // Record interaction and update weights only when liking (not unliking)
+                if (newLikeState) {
+                    val interaction = InteractionEntity(
+                        id = UUID.randomUUID().toString(),
+                        userId = userId,
+                        articleId = articleId,
+                        type = InteractionType.LIKE,
+                        metadata = null,
+                        timestamp = Instant.now(),
+                        synced = false
+                    )
+                    interactionDao.insertInteraction(interaction)
+                    updateTopicWeights(userId, articleId, InteractionType.LIKE)
+                }
+
+                NetworkResult.Success(newLikeState)
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to toggle like: ${e.message}")
+            }
+        }
+
+    override suspend fun toggleDislike(userId: String, articleId: String): NetworkResult<Boolean> =
+        withContext(ioDispatcher) {
+            try {
+                val article = articleDao.getArticleByIdOnce(articleId)
+                    ?: return@withContext NetworkResult.Error("Article not found")
+
+                val newDislikeState = !article.isDisliked
+                articleDao.updateDislikeStatus(articleId, newDislikeState)
+
+                // Record interaction and update weights only when disliking (not undisliking)
+                if (newDislikeState) {
+                    val interaction = InteractionEntity(
+                        id = UUID.randomUUID().toString(),
+                        userId = userId,
+                        articleId = articleId,
+                        type = InteractionType.DISLIKE,
+                        metadata = null,
+                        timestamp = Instant.now(),
+                        synced = false
+                    )
+                    interactionDao.insertInteraction(interaction)
+                    updateTopicWeights(userId, articleId, InteractionType.DISLIKE)
+                }
+
+                NetworkResult.Success(newDislikeState)
+            } catch (e: Exception) {
+                NetworkResult.Error("Failed to toggle dislike: ${e.message}")
             }
         }
 
@@ -304,4 +447,21 @@ class FeedRepositoryImpl @Inject constructor(
             NetworkResult.Success(Unit)
         }
     }
+
+    override suspend fun getSimilarArticles(articleId: String, limit: Int): List<ArticleEntity> =
+        withContext(ioDispatcher) {
+            try {
+                val article = articleDao.getArticleByIdOnce(articleId)
+                    ?: return@withContext emptyList()
+
+                articleDao.getSimilarArticlesByTopicOrSource(
+                    topicId = article.primaryTopicId,
+                    sourceName = article.sourceName,
+                    excludeArticleId = articleId,
+                    limit = limit
+                )
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
 }

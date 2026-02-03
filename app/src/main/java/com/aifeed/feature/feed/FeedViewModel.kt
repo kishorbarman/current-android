@@ -26,6 +26,7 @@ import javax.inject.Inject
 
 data class FeedUiState(
     val isRefreshing: Boolean = false,
+    val isLoadingMore: Boolean = false,
     val error: String? = null,
     val selectedTopicId: String? = null,
     val userTopics: List<TopicEntity> = emptyList()
@@ -85,6 +86,29 @@ class FeedViewModel @Inject constructor(
                 is NetworkResult.Error -> {
                     _uiState.value = _uiState.value.copy(
                         isRefreshing = false,
+                        error = result.message
+                    )
+                }
+                is NetworkResult.Loading -> {
+                    // Already loading
+                }
+            }
+        }
+    }
+
+    fun loadMoreArticles() {
+        viewModelScope.launch {
+            val userId = authRepository.getCurrentUserId() ?: return@launch
+
+            _uiState.value = _uiState.value.copy(isLoadingMore = true, error = null)
+
+            when (val result = feedRepository.loadMoreArticles(userId)) {
+                is NetworkResult.Success -> {
+                    _uiState.value = _uiState.value.copy(isLoadingMore = false)
+                }
+                is NetworkResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isLoadingMore = false,
                         error = result.message
                     )
                 }
@@ -161,24 +185,14 @@ class FeedViewModel @Inject constructor(
     fun likeArticle(article: ArticleEntity) {
         viewModelScope.launch {
             val userId = authRepository.getCurrentUserId() ?: return@launch
-
-            feedRepository.recordInteraction(
-                userId = userId,
-                articleId = article.id,
-                type = InteractionType.LIKE
-            )
+            feedRepository.toggleLike(userId, article.id)
         }
     }
 
     fun dislikeArticle(article: ArticleEntity) {
         viewModelScope.launch {
             val userId = authRepository.getCurrentUserId() ?: return@launch
-
-            feedRepository.recordInteraction(
-                userId = userId,
-                articleId = article.id,
-                type = InteractionType.DISLIKE
-            )
+            feedRepository.toggleDislike(userId, article.id)
         }
     }
 

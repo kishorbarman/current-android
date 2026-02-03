@@ -1,9 +1,11 @@
 package com.aifeed.feature.article
 
 import android.content.Intent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -15,25 +17,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ThumbDown
-import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -53,12 +56,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.aifeed.R
-import com.google.accompanist.web.WebView
-import com.google.accompanist.web.rememberWebViewState
+import com.aifeed.core.database.entity.ArticleEntity
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -67,6 +70,7 @@ import java.util.Locale
 @Composable
 fun ArticleDetailScreen(
     onBackClick: () -> Unit,
+    onSimilarArticleClick: (ArticleEntity) -> Unit,
     viewModel: ArticleDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -142,32 +146,7 @@ fun ArticleDetailScreen(
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                SmallFloatingActionButton(
-                    onClick = { viewModel.likeArticle() },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ThumbUp,
-                        contentDescription = "Like"
-                    )
-                }
-                SmallFloatingActionButton(
-                    onClick = { viewModel.dislikeArticle() },
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ThumbDown,
-                        contentDescription = "Dislike"
-                    )
-                }
-            }
-        }
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         when {
             uiState.isLoading -> {
@@ -274,26 +253,83 @@ fun ArticleDetailScreen(
 
                         Spacer(modifier = Modifier.height(32.dp))
 
-                        // More like this section placeholder
-                        Text(
-                            text = stringResource(R.string.more_like_this),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        // More like this section
+                        if (uiState.similarArticles.isNotEmpty()) {
+                            Text(
+                                text = stringResource(R.string.more_like_this),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "Similar articles will appear here based on your interests.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        // Space for FABs + navigation bar
-                        val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
-                        Spacer(modifier = Modifier.height(80.dp + navBarPadding.calculateBottomPadding()))
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                     }
+
+                    // Similar articles horizontal list (outside the padded column for edge-to-edge)
+                    if (uiState.similarArticles.isNotEmpty()) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(uiState.similarArticles, key = { it.id }) { similarArticle ->
+                                SimilarArticleCard(
+                                    article = similarArticle,
+                                    onClick = { onSimilarArticleClick(similarArticle) }
+                                )
+                            }
+                        }
+                    }
+
+                    // Space for navigation bar
+                    val navBarPadding = WindowInsets.navigationBars.asPaddingValues()
+                    Spacer(modifier = Modifier.height(24.dp + navBarPadding.calculateBottomPadding()))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SimilarArticleCard(
+    article: ArticleEntity,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(280.dp)
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column {
+            article.imageUrl?.let { imageUrl ->
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = article.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = article.sourceName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }

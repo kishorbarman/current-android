@@ -32,6 +32,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -81,6 +83,8 @@ fun ProfileScreen(
     val selectedTab by viewModel.selectedTab.collectAsState()
     val userTopics by viewModel.userTopics.collectAsState()
     val bookmarkedArticles = viewModel.bookmarkedArticles.collectAsLazyPagingItems()
+    val likedArticles = viewModel.likedArticles.collectAsLazyPagingItems()
+    val dislikedArticles = viewModel.dislikedArticles.collectAsLazyPagingItems()
     val readingHistory = viewModel.readingHistory.collectAsLazyPagingItems()
 
     var showSignOutDialog by remember { mutableStateOf(false) }
@@ -202,24 +206,46 @@ fun ProfileScreen(
                 }
             }
 
-            // Tabs for Bookmarks / History
+            // Tabs for Bookmarks / Liked / Disliked / History
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 TabRow(
                     selectedTabIndex = when (selectedTab) {
                         ProfileTab.Bookmarks -> 0
-                        ProfileTab.History -> 1
-                        ProfileTab.Topics -> 2
+                        ProfileTab.Liked -> 1
+                        ProfileTab.Disliked -> 2
+                        ProfileTab.History -> 3
                     }
                 ) {
                     Tab(
                         selected = selectedTab == ProfileTab.Bookmarks,
                         onClick = { viewModel.selectTab(ProfileTab.Bookmarks) },
-                        text = { Text(stringResource(R.string.bookmarks)) },
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Bookmark,
-                                contentDescription = null,
+                                contentDescription = "Bookmarks",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == ProfileTab.Liked,
+                        onClick = { viewModel.selectTab(ProfileTab.Liked) },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.ThumbUp,
+                                contentDescription = "Liked",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == ProfileTab.Disliked,
+                        onClick = { viewModel.selectTab(ProfileTab.Disliked) },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.ThumbDown,
+                                contentDescription = "Disliked",
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -227,11 +253,10 @@ fun ProfileScreen(
                     Tab(
                         selected = selectedTab == ProfileTab.History,
                         onClick = { viewModel.selectTab(ProfileTab.History) },
-                        text = { Text(stringResource(R.string.reading_history)) },
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.History,
-                                contentDescription = null,
+                                contentDescription = "History",
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -259,6 +284,52 @@ fun ProfileScreen(
                                     article = article,
                                     onClick = { onArticleClick(article) },
                                     onRemoveClick = { viewModel.removeBookmark(article.id) }
+                                )
+                            }
+                        }
+                    }
+                }
+                ProfileTab.Liked -> {
+                    if (likedArticles.itemCount == 0) {
+                        item {
+                            EmptyState(
+                                message = "No liked articles yet",
+                                icon = Icons.Default.ThumbUp
+                            )
+                        }
+                    } else {
+                        items(
+                            count = likedArticles.itemCount,
+                            key = { likedArticles[it]?.id ?: it }
+                        ) { index ->
+                            likedArticles[index]?.let { article ->
+                                CompactArticleCard(
+                                    article = article,
+                                    onClick = { onArticleClick(article) },
+                                    onRemoveClick = { viewModel.removeLike(article.id) }
+                                )
+                            }
+                        }
+                    }
+                }
+                ProfileTab.Disliked -> {
+                    if (dislikedArticles.itemCount == 0) {
+                        item {
+                            EmptyState(
+                                message = "No disliked articles yet",
+                                icon = Icons.Default.ThumbDown
+                            )
+                        }
+                    } else {
+                        items(
+                            count = dislikedArticles.itemCount,
+                            key = { dislikedArticles[it]?.id ?: it }
+                        ) { index ->
+                            dislikedArticles[index]?.let { article ->
+                                CompactArticleCard(
+                                    article = article,
+                                    onClick = { onArticleClick(article) },
+                                    onRemoveClick = { viewModel.removeDislike(article.id) }
                                 )
                             }
                         }
@@ -306,9 +377,6 @@ fun ProfileScreen(
                             }
                         }
                     }
-                }
-                ProfileTab.Topics -> {
-                    // Handled above
                 }
             }
 

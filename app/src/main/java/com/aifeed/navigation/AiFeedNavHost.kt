@@ -84,6 +84,9 @@ fun AiFeedNavHost(
             ArticleDetailScreen(
                 onBackClick = {
                     navController.popBackStack()
+                },
+                onSimilarArticleClick = { article ->
+                    navController.navigate(Screen.ArticleDetail.createRoute(article.id))
                 }
             )
         }

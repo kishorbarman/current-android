@@ -28,6 +28,10 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +39,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -201,7 +206,11 @@ fun FeedScreen(
                     viewModel.onArticleClicked(article)
                     onArticleClick(article)
                 },
-                onBookmarkClick = { viewModel.toggleBookmark(it) }
+                onBookmarkClick = { viewModel.toggleBookmark(it) },
+                onLikeClick = { viewModel.likeArticle(it) },
+                onDislikeClick = { viewModel.dislikeArticle(it) },
+                onLoadMore = { viewModel.loadMoreArticles() },
+                isLoadingMore = uiState.isLoadingMore
             )
         }
     }
@@ -211,7 +220,11 @@ fun FeedScreen(
 private fun ArticleList(
     articles: LazyPagingItems<ArticleEntity>,
     onArticleClick: (ArticleEntity) -> Unit,
-    onBookmarkClick: (ArticleEntity) -> Unit
+    onBookmarkClick: (ArticleEntity) -> Unit,
+    onLikeClick: (ArticleEntity) -> Unit,
+    onDislikeClick: (ArticleEntity) -> Unit,
+    onLoadMore: () -> Unit,
+    isLoadingMore: Boolean
 ) {
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues()
     LazyColumn(
@@ -228,7 +241,9 @@ private fun ArticleList(
                 ArticleItem(
                     article = article,
                     onClick = { onArticleClick(article) },
-                    onBookmarkClick = { onBookmarkClick(article) }
+                    onBookmarkClick = { onBookmarkClick(article) },
+                    onLikeClick = { onLikeClick(article) },
+                    onDislikeClick = { onDislikeClick(article) }
                 )
                 if (index < articles.itemCount - 1) {
                     Divider(
@@ -241,7 +256,7 @@ private fun ArticleList(
         }
 
         // Loading state
-        when (articles.loadState.append) {
+        when (val appendState = articles.loadState.append) {
             is LoadState.Loading -> {
                 item {
                     Box(
@@ -269,7 +284,27 @@ private fun ArticleList(
                     }
                 }
             }
-            is LoadState.NotLoading -> {}
+            is LoadState.NotLoading -> {
+                // Show "Load More" button when we've reached the end of cached articles
+                if (appendState.endOfPaginationReached && articles.itemCount > 0) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isLoadingMore) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            } else {
+                                OutlinedButton(onClick = onLoadMore) {
+                                    Text("Load More")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Initial loading state
@@ -310,7 +345,9 @@ private fun ArticleList(
 private fun ArticleItem(
     article: ArticleEntity,
     onClick: () -> Unit,
-    onBookmarkClick: () -> Unit
+    onBookmarkClick: () -> Unit,
+    onLikeClick: () -> Unit,
+    onDislikeClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -378,23 +415,67 @@ private fun ArticleItem(
                     )
                 }
 
-                IconButton(
-                    onClick = onBookmarkClick,
-                    modifier = Modifier.size(24.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (article.isBookmarked) {
-                            Icons.Default.Bookmark
-                        } else {
-                            Icons.Default.BookmarkBorder
-                        },
-                        contentDescription = "Bookmark",
-                        tint = if (article.isBookmarked) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
+                    IconButton(
+                        onClick = onLikeClick,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (article.isLiked) {
+                                Icons.Filled.ThumbUp
+                            } else {
+                                Icons.Outlined.ThumbUp
+                            },
+                            contentDescription = "Like",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (article.isLiked) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                    IconButton(
+                        onClick = onDislikeClick,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (article.isDisliked) {
+                                Icons.Filled.ThumbDown
+                            } else {
+                                Icons.Outlined.ThumbDown
+                            },
+                            contentDescription = "Dislike",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (article.isDisliked) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                    IconButton(
+                        onClick = onBookmarkClick,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (article.isBookmarked) {
+                                Icons.Default.Bookmark
+                            } else {
+                                Icons.Default.BookmarkBorder
+                            },
+                            contentDescription = "Bookmark",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (article.isBookmarked) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
                 }
             }
         }

@@ -26,5 +26,7 @@ data class ArticleEntity(
     val relevanceScore: Float = 0f,
     val isBookmarked: Boolean = false,
     val isRead: Boolean = false,
+    val isLiked: Boolean = false,
+    val isDisliked: Boolean = false,
     val cachedAt: Instant = Instant.now()
 )

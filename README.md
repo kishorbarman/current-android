@@ -120,21 +120,46 @@ Data Sources (Room DB, Retrofit API)
 
 ## Recommendation Algorithm
 
-The feed uses a hybrid recommendation approach:
+The feed uses a personalized recommendation system that learns from user behavior.
 
-1. **Topic Relevance (40%)**: Based on user's selected topics and learned weights
-2. **Freshness (30%)**: Exponential decay with 48-hour half-life
-3. **Diversity (30%)**: Random factor to prevent filter bubbles
+### Relevance Score Calculation
+
+Each article's relevance is calculated as:
+
+```
+relevanceScore = (topicWeight × 0.6) + (sourceWeight × 0.4)
+```
+
+- **Topic Weight (60%)**: Learned preference for the article's category
+- **Source Weight (40%)**: Learned preference for the news source
 
 ### Interaction Signals
 
-| Signal | Weight Impact |
-|--------|--------------|
-| Click | +0.1 |
-| Read > 30s | +0.2 |
-| Bookmark | +0.5 |
-| Share | +0.6 |
-| Dislike | -1.0 |
+User interactions adjust both topic and source weights:
+
+| Signal | Weight Delta | Effect |
+|--------|-------------|--------|
+| Like | +0.4 | Promotes similar content |
+| Bookmark | +0.5 | Strong positive signal |
+| Share | +0.6 | Strongest positive signal |
+| Read > 5s | +0.2 | Moderate engagement |
+| Click | +0.1 | Light interest |
+| Dislike | -1.0 | Demotes similar content |
+
+### How It Works
+
+1. **Initial Setup**: User selects topics during onboarding (weight = 1.0)
+2. **Learning**: Each interaction updates topic and source weights
+3. **Scoring**: New articles are scored based on learned preferences
+4. **Ranking**: Feed is sorted by relevance score (highest first)
+5. **Adaptation**: Weights are clamped between 0.1 and 3.0 to prevent extreme bias
+
+### Similar Articles
+
+The "More like this" section shows articles that match:
+- Same topic (primary signal)
+- Same source (secondary signal)
+- Not yet read by the user
 
 ## Testing
 

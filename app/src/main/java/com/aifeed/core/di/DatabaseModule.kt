@@ -6,6 +6,7 @@ import com.aifeed.core.database.AiFeedDatabase
 import com.aifeed.core.database.dao.ArticleDao
 import com.aifeed.core.database.dao.InteractionDao
 import com.aifeed.core.database.dao.TopicDao
+import com.aifeed.core.database.dao.UserSourceDao
 import com.aifeed.core.database.dao.UserTopicDao
 import dagger.Module
 import dagger.Provides
@@ -54,5 +55,11 @@ object DatabaseModule {
     @Singleton
     fun provideInteractionDao(database: AiFeedDatabase): InteractionDao {
         return database.interactionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserSourceDao(database: AiFeedDatabase): UserSourceDao {
+        return database.userSourceDao()
     }
 }

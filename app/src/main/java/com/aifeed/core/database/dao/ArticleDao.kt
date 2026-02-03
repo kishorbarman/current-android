@@ -80,6 +80,24 @@ interface ArticleDao {
     @Query("UPDATE articles SET isRead = :isRead WHERE id = :id")
     suspend fun updateReadStatus(id: String, isRead: Boolean)
 
+    @Query("UPDATE articles SET isLiked = :isLiked, isDisliked = 0 WHERE id = :id")
+    suspend fun updateLikeStatus(id: String, isLiked: Boolean)
+
+    @Query("UPDATE articles SET isDisliked = :isDisliked, isLiked = 0 WHERE id = :id")
+    suspend fun updateDislikeStatus(id: String, isDisliked: Boolean)
+
+    @Query("SELECT * FROM articles WHERE isLiked = 1 ORDER BY cachedAt DESC")
+    fun getLikedArticles(): Flow<List<ArticleEntity>>
+
+    @Query("SELECT * FROM articles WHERE isLiked = 1 ORDER BY cachedAt DESC")
+    fun getLikedArticlesPaged(): PagingSource<Int, ArticleEntity>
+
+    @Query("SELECT * FROM articles WHERE isDisliked = 1 ORDER BY cachedAt DESC")
+    fun getDislikedArticles(): Flow<List<ArticleEntity>>
+
+    @Query("SELECT * FROM articles WHERE isDisliked = 1 ORDER BY cachedAt DESC")
+    fun getDislikedArticlesPaged(): PagingSource<Int, ArticleEntity>
+
     @Query("UPDATE articles SET relevanceScore = :score WHERE id = :id")
     suspend fun updateRelevanceScore(id: String, score: Float)
 
@@ -97,4 +115,35 @@ interface ArticleDao {
 
     @Query("SELECT COUNT(*) FROM articles WHERE primaryTopicId = :topicId")
     suspend fun getArticleCountByTopic(topicId: String): Int
+
+    @Query("""
+        SELECT * FROM articles
+        WHERE primaryTopicId = :topicId
+          AND id != :excludeArticleId
+          AND isRead = 0
+        ORDER BY publishedAt DESC
+        LIMIT :limit
+    """)
+    suspend fun getSimilarArticles(
+        topicId: String,
+        excludeArticleId: String,
+        limit: Int = 10
+    ): List<ArticleEntity>
+
+    @Query("""
+        SELECT * FROM articles
+        WHERE (primaryTopicId = :topicId OR sourceName = :sourceName)
+          AND id != :excludeArticleId
+          AND isRead = 0
+        ORDER BY
+          CASE WHEN primaryTopicId = :topicId THEN 0 ELSE 1 END,
+          publishedAt DESC
+        LIMIT :limit
+    """)
+    suspend fun getSimilarArticlesByTopicOrSource(
+        topicId: String,
+        sourceName: String,
+        excludeArticleId: String,
+        limit: Int = 10
+    ): List<ArticleEntity>
 }
