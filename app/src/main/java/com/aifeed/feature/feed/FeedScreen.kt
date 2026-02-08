@@ -43,6 +43,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -53,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +75,8 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import coil.compose.AsyncImage
 import com.aifeed.R
 import com.aifeed.core.database.entity.ArticleEntity
+import com.aifeed.feature.trending.TrendingContent
+import com.aifeed.feature.trending.TrendingViewModel
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import java.time.Duration
@@ -83,11 +88,14 @@ fun FeedScreen(
     onArticleClick: (ArticleEntity) -> Unit,
     onSearchClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onTrendingTopicClick: (String) -> Unit,
     viewModel: FeedViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val trendingViewModel: TrendingViewModel = hiltViewModel()
     val articles = viewModel.articles.collectAsLazyPagingItems()
     val snackbarHostState = remember { SnackbarHostState() }
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
 
     // Track scroll for collapsing header with accumulated offset and threshold
     var accumulatedScroll by remember { mutableIntStateOf(0) }
@@ -164,8 +172,24 @@ fun FeedScreen(
                             containerColor = MaterialTheme.colorScheme.surface
                         )
                     )
-                    // Topic filter chips
-                    if (uiState.userTopics.isNotEmpty()) {
+                    // Tab row for News and Trending
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ) {
+                        Tab(
+                            selected = selectedTabIndex == 0,
+                            onClick = { selectedTabIndex = 0 },
+                            text = { Text(stringResource(R.string.tab_news)) }
+                        )
+                        Tab(
+                            selected = selectedTabIndex == 1,
+                            onClick = { selectedTabIndex = 1 },
+                            text = { Text(stringResource(R.string.tab_trending)) }
+                        )
+                    }
+                    // Topic filter chips (only for News tab)
+                    if (selectedTabIndex == 0 && uiState.userTopics.isNotEmpty()) {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -192,26 +216,42 @@ fun FeedScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        SwipeRefresh(
-            state = rememberSwipeRefreshState(isRefreshing = uiState.isRefreshing),
-            onRefresh = { viewModel.refreshFeed() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .nestedScroll(nestedScrollConnection)
-        ) {
-            ArticleList(
-                articles = articles,
-                onArticleClick = { article ->
-                    viewModel.onArticleClicked(article)
-                    onArticleClick(article)
-                },
-                onBookmarkClick = { viewModel.toggleBookmark(it) },
-                onLikeClick = { viewModel.likeArticle(it) },
-                onDislikeClick = { viewModel.dislikeArticle(it) },
-                onLoadMore = { viewModel.loadMoreArticles() },
-                isLoadingMore = uiState.isLoadingMore
-            )
+        when (selectedTabIndex) {
+            0 -> {
+                SwipeRefresh(
+                    state = rememberSwipeRefreshState(isRefreshing = uiState.isRefreshing),
+                    onRefresh = { viewModel.refreshFeed() },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .nestedScroll(nestedScrollConnection)
+                ) {
+                    ArticleList(
+                        articles = articles,
+                        onArticleClick = { article ->
+                            viewModel.onArticleClicked(article)
+                            onArticleClick(article)
+                        },
+                        onBookmarkClick = { viewModel.toggleBookmark(it) },
+                        onLikeClick = { viewModel.likeArticle(it) },
+                        onDislikeClick = { viewModel.dislikeArticle(it) },
+                        onLoadMore = { viewModel.loadMoreArticles() },
+                        isLoadingMore = uiState.isLoadingMore
+                    )
+                }
+            }
+            1 -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                ) {
+                    TrendingContent(
+                        viewModel = trendingViewModel,
+                        onTopicClick = onTrendingTopicClick
+                    )
+                }
+            }
         }
     }
 }

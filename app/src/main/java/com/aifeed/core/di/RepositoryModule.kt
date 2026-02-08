@@ -10,6 +10,8 @@ import com.aifeed.feature.profile.data.ProfileRepository
 import com.aifeed.feature.profile.data.ProfileRepositoryImpl
 import com.aifeed.feature.search.data.SearchRepository
 import com.aifeed.feature.search.data.SearchRepositoryImpl
+import com.aifeed.feature.trending.data.TrendingRepository
+import com.aifeed.feature.trending.data.TrendingRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -49,4 +51,10 @@ abstract class RepositoryModule {
     abstract fun bindSearchRepository(
         searchRepositoryImpl: SearchRepositoryImpl
     ): SearchRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTrendingRepository(
+        trendingRepositoryImpl: TrendingRepositoryImpl
+    ): TrendingRepository
 }

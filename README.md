@@ -11,6 +11,7 @@ An Android app that creates personalized article feeds based on user interests.
 - **Bookmarks & History**: Save articles for later and track your reading history
 - **Search**: Full-text search across all articles
 - **Dark Mode**: Eye-friendly dark theme support
+- **Trending on X**: AI-clustered real-time topics from authoritative X accounts
 
 ## Tech Stack
 
@@ -23,7 +24,8 @@ An Android app that creates personalized article feeds based on user interests.
 | Auth | Firebase Auth + Credential Manager |
 | Analytics | Firebase Analytics + Crashlytics |
 | Push | Firebase Cloud Messaging |
-| Content Sources | NewsAPI, RSS feeds |
+| Content Sources | NewsAPI, RSS feeds, X API |
+| AI Summarization | Gemini |
 
 ## Project Structure
 
@@ -160,6 +162,33 @@ The "More like this" section shows articles that match:
 - Same topic (primary signal)
 - Same source (secondary signal)
 - Not yet read by the user
+
+## Trending On X
+
+The **Trending on X** tab surfaces concrete, event-driven topics from trusted accounts and summarizes them with Gemini.
+
+### Data Pipeline
+
+1. Pull recent posts from curated authoritative accounts (news wires, institutions, major tech/company accounts)
+2. Score posts by engagement + source quality (trust weight, follower signal, verification bonus)
+3. Build a fast first-pass topic snapshot and render it immediately
+4. Run Gemini refinement in the background to improve event clustering and summaries
+5. Persist topics/posts in Room for smooth tab switching and detail navigation
+
+### UX Behavior
+
+- Topic cards show an AI disclaimer: `Summarized by AI - may contain errors`
+- Progressive list loading:
+  - Show first 5 topics immediately
+  - Auto-reveal in batches of 5 until 20
+  - After 20, manual `Load more` reveals 5 additional topics each time
+- Topic detail view shows all related X posts for that topic
+
+### Refresh Policy
+
+- No automatic refresh when switching tabs or returning from topic detail
+- On app reopen, refresh only if cached Trending data is older than 2 hours
+- Pull-to-refresh is available for manual updates at any time
 
 ## Testing
 

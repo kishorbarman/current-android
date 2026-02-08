@@ -1,8 +1,10 @@
 package com.aifeed.core.di
 
 import com.aifeed.BuildConfig
+import com.aifeed.core.network.api.GeminiApiService
 import com.aifeed.core.network.api.NewsApiService
 import com.aifeed.core.network.api.SupabaseApiService
+import com.aifeed.core.network.api.XApiService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -69,14 +71,24 @@ object NetworkModule {
         okHttpClient: OkHttpClient,
         @Named(SUPABASE_BASE_URL) baseUrl: String
     ): Retrofit {
+        val supabaseApiKey = BuildConfig.SUPABASE_ANON_KEY.trim()
+        require(supabaseApiKey.isNotEmpty()) {
+            "SUPABASE_ANON_KEY is missing. Set it in local.properties and rebuild."
+        }
+
         return Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(okHttpClient.newBuilder()
                 .addInterceptor { chain ->
                     val original = chain.request()
+                    val urlWithApiKey = original.url.newBuilder()
+                        // Keep apikey in query as fallback in case intermediaries strip headers.
+                        .addQueryParameter("apikey", supabaseApiKey)
+                        .build()
                     val request = original.newBuilder()
-                        .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
-                        .header("Authorization", "Bearer ${BuildConfig.SUPABASE_ANON_KEY}")
+                        .url(urlWithApiKey)
+                        .header("apikey", supabaseApiKey)
+                        .header("Authorization", "Bearer $supabaseApiKey")
                         .header("Content-Type", "application/json")
                         .header("Prefer", "return=representation")
                         .build()
@@ -123,5 +135,69 @@ object NetworkModule {
         @Named("NewsApiRetrofit") retrofit: Retrofit
     ): NewsApiService {
         return retrofit.create(NewsApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @Named("XApiRetrofit")
+    fun provideXApiRetrofit(
+        okHttpClient: OkHttpClient
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://api.twitter.com/")
+            .client(okHttpClient.newBuilder()
+                .addInterceptor { chain ->
+                    val original = chain.request()
+                    val request = original.newBuilder()
+                        .header("Authorization", "Bearer ${BuildConfig.X_BEARER_TOKEN}")
+                        .build()
+                    chain.proceed(request)
+                }
+                .build())
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideXApiService(
+        @Named("XApiRetrofit") retrofit: Retrofit
+    ): XApiService {
+        return retrofit.create(XApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @Named("GeminiRetrofit")
+    fun provideGeminiRetrofit(
+        okHttpClient: OkHttpClient
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://generativelanguage.googleapis.com/")
+            .client(okHttpClient.newBuilder()
+                .addInterceptor { chain ->
+                    val original = chain.request()
+                    val url = original.url.newBuilder()
+                        .addQueryParameter("key", BuildConfig.GEMINI_API_KEY)
+                        .build()
+                    val request = original.newBuilder()
+                        .url(url)
+                        .header("Content-Type", "application/json")
+                        .build()
+                    chain.proceed(request)
+                }
+                .connectTimeout(60, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .build())
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGeminiApiService(
+        @Named("GeminiRetrofit") retrofit: Retrofit
+    ): GeminiApiService {
+        return retrofit.create(GeminiApiService::class.java)
     }
 }

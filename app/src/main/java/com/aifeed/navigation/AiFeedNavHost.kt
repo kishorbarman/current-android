@@ -13,6 +13,7 @@ import com.aifeed.feature.feed.FeedScreen
 import com.aifeed.feature.onboarding.OnboardingScreen
 import com.aifeed.feature.profile.ProfileScreen
 import com.aifeed.feature.search.SearchScreen
+import com.aifeed.feature.trending.TrendingTopicDetailScreen
 
 sealed class Screen(val route: String) {
     data object Auth : Screen("auth")
@@ -23,6 +24,9 @@ sealed class Screen(val route: String) {
     }
     data object Search : Screen("search")
     data object Profile : Screen("profile")
+    data object TrendingTopicDetail : Screen("trending/topic/{topicId}") {
+        fun createRoute(topicId: String) = "trending/topic/$topicId"
+    }
 }
 
 @Composable
@@ -71,6 +75,9 @@ fun AiFeedNavHost(
                 },
                 onProfileClick = {
                     navController.navigate(Screen.Profile.route)
+                },
+                onTrendingTopicClick = { topicId ->
+                    navController.navigate(Screen.TrendingTopicDetail.createRoute(topicId))
                 }
             )
         }
@@ -117,6 +124,19 @@ fun AiFeedNavHost(
                     navController.navigate(Screen.Auth.route) {
                         popUpTo(0) { inclusive = true }
                     }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.TrendingTopicDetail.route,
+            arguments = listOf(
+                navArgument("topicId") { type = NavType.StringType }
+            )
+        ) {
+            TrendingTopicDetailScreen(
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }

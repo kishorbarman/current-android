@@ -6,6 +6,8 @@ import com.aifeed.core.database.AiFeedDatabase
 import com.aifeed.core.database.dao.ArticleDao
 import com.aifeed.core.database.dao.InteractionDao
 import com.aifeed.core.database.dao.TopicDao
+import com.aifeed.core.database.dao.TrendingTopicDao
+import com.aifeed.core.database.dao.TrendingTweetDao
 import com.aifeed.core.database.dao.UserSourceDao
 import com.aifeed.core.database.dao.UserTopicDao
 import dagger.Module
@@ -61,5 +63,17 @@ object DatabaseModule {
     @Singleton
     fun provideUserSourceDao(database: AiFeedDatabase): UserSourceDao {
         return database.userSourceDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTrendingTopicDao(database: AiFeedDatabase): TrendingTopicDao {
+        return database.trendingTopicDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTrendingTweetDao(database: AiFeedDatabase): TrendingTweetDao {
+        return database.trendingTweetDao()
     }
 }

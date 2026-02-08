@@ -7,11 +7,15 @@ import com.aifeed.core.database.converter.Converters
 import com.aifeed.core.database.dao.ArticleDao
 import com.aifeed.core.database.dao.InteractionDao
 import com.aifeed.core.database.dao.TopicDao
+import com.aifeed.core.database.dao.TrendingTopicDao
+import com.aifeed.core.database.dao.TrendingTweetDao
 import com.aifeed.core.database.dao.UserSourceDao
 import com.aifeed.core.database.dao.UserTopicDao
 import com.aifeed.core.database.entity.ArticleEntity
 import com.aifeed.core.database.entity.InteractionEntity
 import com.aifeed.core.database.entity.TopicEntity
+import com.aifeed.core.database.entity.TrendingTopicEntity
+import com.aifeed.core.database.entity.TrendingTweetEntity
 import com.aifeed.core.database.entity.UserSourceEntity
 import com.aifeed.core.database.entity.UserTopicEntity
 
@@ -21,9 +25,11 @@ import com.aifeed.core.database.entity.UserTopicEntity
         TopicEntity::class,
         UserTopicEntity::class,
         UserSourceEntity::class,
-        InteractionEntity::class
+        InteractionEntity::class,
+        TrendingTopicEntity::class,
+        TrendingTweetEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -33,6 +39,8 @@ abstract class AiFeedDatabase : RoomDatabase() {
     abstract fun userTopicDao(): UserTopicDao
     abstract fun userSourceDao(): UserSourceDao
     abstract fun interactionDao(): InteractionDao
+    abstract fun trendingTopicDao(): TrendingTopicDao
+    abstract fun trendingTweetDao(): TrendingTweetDao
 
     companion object {
         const val DATABASE_NAME = "aifeed_database"

@@ -13,3 +13,9 @@ NEWS_API_KEY=your-newsapi-key-here
 
 # Google Sign-In (from Firebase Console > Authentication > Sign-in method > Google)
 GOOGLE_WEB_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
+
+# X (Twitter) API - Basic tier required for search ($100/mo)
+X_BEARER_TOKEN=your-x-bearer-token-here
+
+# Gemini API - Free tier available at aistudio.google.com
+GEMINI_API_KEY=your-gemini-api-key-here
